@@ -1,0 +1,107 @@
+name: Build VerdantTable Android APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build variant (debug or release)"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install dependencies (including Capacitor)
+        run: |
+          npm ci
+          npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Type-check and build Vite web bundle
+        run: |
+          npm run lint
+          npm run build
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          APP_URL: ${{ secrets.APP_URL }}
+
+      - name: Initialize & sync Capacitor Android project
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap init "VerdantTable" "com.verdanttable.app" --web-dir=dist
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build Debug APK
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Sign and Build Release APK
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release-key.jks
+          cat <<EOF >> android/app/build.gradle
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file("release-key.jks")
+                      storePassword System.getenv("KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("KEY_ALIAS")
+                      keyPassword System.getenv("KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                  }
+              }
+          }
+          EOF
+          cd android && chmod +x gradlew && ./gradlew assembleRelease
+
+      - name: Upload Debug APK artifact
+        if: ${{ github.event.inputs.build_type != 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VerdantTable-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload Release APK artifact
+        if: ${{ github.event.inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VerdantTable-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
