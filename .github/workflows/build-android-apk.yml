@@ -1,3 +1,4 @@
+
 name: Build VerdantTable Android APK
 
 on:
@@ -27,7 +28,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
 
       - name: Setup Java (JDK 17)
         uses: actions/setup-java@v4
@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies (including Capacitor)
         run: |
-          npm ci
+          npm install
           npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Type-check and build Vite web bundle
