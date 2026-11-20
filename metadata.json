@@ -1,0 +1,6 @@
+{
+  "name": "VerdantTable",
+  "description": "Smart weekly meal planner, daily nutrition tracker, custom recipe library, and automated aisle-grouped grocery list generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
